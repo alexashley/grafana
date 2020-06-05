@@ -113,7 +113,6 @@ func (e *StackdriverExecutor) getGCEDefaultProject(ctx context.Context, tsdbQuer
 }
 
 func (e *StackdriverExecutor) executeTimeSeriesQuery(ctx context.Context, tsdbQuery *tsdb.TsdbQuery) (*tsdb.Response, error) {
-	slog.Info("executeTimeSeriesQuery")
 	result := &tsdb.Response{
 		Results: make(map[string]*tsdb.QueryResult),
 	}
@@ -153,14 +152,8 @@ func (e *StackdriverExecutor) buildQueries(tsdbQuery *tsdb.TsdbQuery) ([]*stackd
 
 	durationSeconds := int(endTime.Sub(startTime).Seconds())
 
-	slog.Info("getting default project name")
-	defaultProjectName, err := e.getDefaultProject(context.TODO())
-	if err != nil {
-		return nil, err
-	}
-
 	for _, query := range tsdbQuery.Queries {
-		migrateLegacyQueryModel(query, defaultProjectName)
+		migrateLegacyQueryModel(query)
 		q := grafanaQuery{}
 		model, _ := query.Model.MarshalJSON()
 		if err := json.Unmarshal(model, &q); err != nil {
@@ -210,19 +203,9 @@ func (e *StackdriverExecutor) buildQueries(tsdbQuery *tsdb.TsdbQuery) ([]*stackd
 	return stackdriverQueries, nil
 }
 
-func migrateLegacyQueryModel(query *tsdb.Query, defaultProjectName string) {
+func migrateLegacyQueryModel(query *tsdb.Query) {
 	mq := query.Model.Get("metricQuery").MustMap()
-	projectName := defaultProjectName
-	slog.Info("default project name " + defaultProjectName)
-
-	if queryProjectName, ok := query.Model.CheckGet("projectName"); ok {
-		slog.Info("using query project name")
-		projectName = queryProjectName.MustString()
-	}
-	slog.Info("using project name " + projectName)
-
 	if mq == nil {
-		query.Model.Set("projectName", projectName)
 		migratedModel := simplejson.NewFromAny(map[string]interface{}{
 			"queryType":   metricQueryType,
 			"metricQuery": query.Model,
